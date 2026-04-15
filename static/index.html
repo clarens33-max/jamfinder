@@ -86,6 +86,8 @@ a{color:inherit;text-decoration:none}
 .tag-mrda{background:#E8EAF6;color:#283593}
 .tag-junior{background:#F1F8E9;color:#33691E}
 .tag-open{background:#E1F5FE;color:#01579B}
+.tag-ota{background:#FFF8E1;color:#E65100}
+.tag-wftda{background:#FCE4EC;color:#880E4F}
 
 /* LOCATION VIEW */
 .loc-group{border:1px solid #EAEAE4;border-radius:12px;overflow:hidden;background:#fff;transition:box-shadow 0.12s}
@@ -167,8 +169,9 @@ footer a{color:#E91E8C}
       <input type="text" id="search" placeholder="Search events, teams, cities…" autocomplete="off">
     </div>
     <span class="fl" style="margin-left:8px">When</span>
-    <button class="chip on" data-filter="time" data-value="upcoming">Upcoming</button>
-    <button class="chip" data-filter="time" data-value="all">All 2026</button>
+    <button class="chip" data-filter="time" data-value="1m">Next month</button>
+    <button class="chip on" data-filter="time" data-value="3m">Next 3 months</button>
+    <button class="chip" data-filter="time" data-value="12m">Next 12 months</button>
     <span id="results-info"></span>
   </div>
   <div class="filter-row">
@@ -178,7 +181,9 @@ footer a{color:#E91E8C}
     <button class="chip" data-filter="type" data-value="scrim">Scrims</button>
     <button class="chip" data-filter="type" data-value="tournament">Tournaments</button>
     <button class="chip" data-filter="type" data-value="rookie">Rookie</button>
+    <button class="chip" data-filter="type" data-value="wftda">WFTDA</button>
     <button class="chip" data-filter="type" data-value="mrda">MRDA</button>
+    <button class="chip" data-filter="type" data-value="ota">OTA</button>
     <button class="chip" data-filter="type" data-value="junior">Junior</button>
     <span class="fl" style="margin-left:8px">5N Tier</span>
     <button class="chip on" data-filter="tier" data-value="all">All</button>
@@ -241,12 +246,13 @@ function buildTags(ev) {
   const tags = [];
   if (ev.is5N) tags.push(`<span class="tag tag-5n">5 Nations</span>`);
   if (ev.tier) tags.push(`<span class="tag tag-t${ev.tier}">Tier ${ev.tier}</span>`);
-  if (ev.isRookie) tags.push(`<span class="tag tag-rookie">Rookie</span>`);
+  if (ev.isOTA) tags.push(`<span class="tag tag-ota">OTA</span>`);
   if (ev.isMRDA) tags.push(`<span class="tag tag-mrda">MRDA</span>`);
+  if (ev.isRookie) tags.push(`<span class="tag tag-rookie">Rookie</span>`);
   if (ev.isJunior) tags.push(`<span class="tag tag-junior">Junior</span>`);
   if (ev.isTournament) tags.push(`<span class="tag tag-tournament">Tournament</span>`);
   if (ev.isScrim) tags.push(`<span class="tag tag-scrim">Scrim</span>`);
-  if (ev.isOpen) tags.push(`<span class="tag tag-open">Open</span>`);
+  if (ev.gameCount > 1) tags.push(`<span class="tag tag-scrim">${ev.gameCount} games</span>`);
   return tags.join('');
 }
 
@@ -271,21 +277,32 @@ function eventCard(ev) {
 let allEvents = [];
 let filteredEvents = [];
 let currentView = 'map';
-let filters = { time: 'upcoming', type: 'all', tier: 'all', search: '' };
+let filters = { time: '3m', type: 'all', tier: 'all', search: '' };
 let leafletMap = null;
 let markerLayer = null;
 const TODAY = new Date(); TODAY.setUTCHours(0,0,0,0);
 
 // ─── FILTERING ────────────────────────────────────────────────────────────────
 function matchesFilters(ev) {
-  if (filters.time === 'upcoming' && ev.date < TODAY) return false;
+  // Date window
+  if (filters.time !== 'all') {
+    const months = filters.time === '1m' ? 1 : filters.time === '3m' ? 3 : 12;
+    const cutoff = new Date(TODAY);
+    cutoff.setMonth(cutoff.getMonth() + months);
+    if (ev.date < TODAY || ev.date > cutoff) return false;
+  }
+  // Type
   if (filters.type === '5n'         && !ev.is5N) return false;
   if (filters.type === 'scrim'      && !ev.isScrim) return false;
   if (filters.type === 'tournament' && !ev.isTournament) return false;
   if (filters.type === 'rookie'     && !ev.isRookie) return false;
+  if (filters.type === 'wftda'      && !ev.isWFTDA) return false;
   if (filters.type === 'mrda'       && !ev.isMRDA) return false;
+  if (filters.type === 'ota'        && !ev.isOTA) return false;
   if (filters.type === 'junior'     && !ev.isJunior) return false;
+  // Tier
   if (filters.tier !== 'all'        && ev.tier !== parseInt(filters.tier)) return false;
+  // Search
   if (filters.search) {
     const q = filters.search.toLowerCase();
     if (!`${ev.summary} ${ev.location} ${ev.host} ${ev.description}`.toLowerCase().includes(q)) return false;

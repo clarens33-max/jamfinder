@@ -172,12 +172,29 @@ def classify(summary: str) -> dict:
     elif tw:
         tier = int(tw.group(1))
 
+    # Multi-game detection
+    game_count_m = re.search(r'\b(double|triple|quad)\s+header\b', s, re.IGNORECASE)
+    game_count = {'double': 2, 'triple': 3, 'quad': 4}.get(
+        game_count_m.group(1).lower(), 1
+    ) if game_count_m else 1
+
+    # Gender/category classification
+    # OTA: explicit "OTA", "Open To All", or standalone O suffix in tier context
+    isOTA = bool(re.search(r'\bOTA\b|open\s+to\s+all|\bT[1-5]\s*O\b|\bO\b\s*$', s, re.IGNORECASE))
+    # MRDA: explicit "MRDA" or T[x]M tier code
+    isMRDA = bool(re.search(r'\bMRDA\b|\bT[1-5]\s*M\b', s))
+    # WFTDA: explicit tag, or default (anything not MRDA/OTA)
+    isWFTDA = bool(re.search(r'\bWFTDA\b|\bT[1-5]\s*W\b|women', s, re.IGNORECASE)) or (not isMRDA and not isOTA)
+
     return {
         'is5N': is5N,
         'tier': tier,
+        'gameCount': game_count,
         'isScrim': bool(re.search(r'\bscrim\b|closed\s*door', s, re.IGNORECASE)),
         'isRookie': bool(re.search(r'\brookies?\b', s, re.IGNORECASE)),
-        'isMRDA': bool(re.search(r'\bMRDA\b', s)),
+        'isMRDA': isMRDA,
+        'isOTA': isOTA,
+        'isWFTDA': isWFTDA,
         'isJunior': bool(re.search(r'\b(JRDA|[Jj]unior)\b', s)),
         'isTournament': bool(re.search(
             r'\b(tournament|cup|weekender|big\s*weekend|showdown|showcase|championship|playoffs?)\b',
@@ -185,6 +202,26 @@ def classify(summary: str) -> dict:
         )),
         'isOpen': bool(re.search(r'open\s*(wftda|scrim)', s, re.IGNORECASE)),
     }
+
+
+def expand_multi_tier(event: dict) -> list[dict]:
+    """Split 'T1 and T3' style summaries into two separate events."""
+    m = re.search(r'\bT([1-5])\s+and\s+T([1-5])\b', event['summary'], re.IGNORECASE)
+    if not m:
+        return [event]
+    tier1, tier2 = m.group(1), m.group(2)
+    results = []
+    for tier in [tier1, tier2]:
+        ev = dict(event)
+        ev['uid'] = f"{event['uid']}_t{tier}"
+        ev['summary'] = re.sub(
+            r'\bT[1-5]\s+and\s+T[1-5]\b',
+            f'T{tier}',
+            event['summary'],
+            flags=re.IGNORECASE,
+        )
+        results.append(ev)
+    return results
 
 
 async def fetch_events() -> list[dict]:
@@ -196,10 +233,11 @@ async def fetch_events() -> list[dict]:
     raw = parse_ics(text)
     events = []
     for e in raw:
-        events.append({
-            **e,
-            **classify(e['summary']),
-            'coords': geocode(e['location']),
-        })
+        for ev in expand_multi_tier(e):
+            events.append({
+                **ev,
+                **classify(ev['summary']),
+                'coords': geocode(ev['location']),
+            })
 
     return sorted(events, key=lambda x: x['date'])

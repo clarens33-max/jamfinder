@@ -112,8 +112,8 @@ a{color:inherit;text-decoration:none}
 .loc-count{font-size:0.72rem;background:#F5F5F0;color:#777;padding:2px 8px;border-radius:10px}
 .loc-chevron{font-size:12px;color:#BBB;transition:transform 0.15s}
 .loc-group.open .loc-chevron{transform:rotate(90deg)}
-.loc-events{display:none;border-top:1px solid #EAEAE4;padding:4px 0 4px}
-.loc-group.open .loc-events{display:block}
+.loc-events{display:none;border-top:1px solid #EAEAE4;padding:8px 10px;flex-direction:column;gap:8px}
+.loc-group.open .loc-events{display:flex}
 .loc-ev{display:flex;align-items:flex-start;gap:12px;padding:9px 15px;border-bottom:1px solid #F5F5F0;transition:background 0.1s}
 .loc-ev:last-child{border-bottom:none}
 .loc-ev:hover{background:#FAFAF8}
@@ -405,18 +405,7 @@ function renderLocations() {
   const sorted = Object.entries(byLoc).sort(([,a],[,b]) => a[0].date - b[0].date);
   let html = '<div class="loc-grid">';
   for (const [loc, evs] of sorted) {
-    const evItems = evs.map(ev => {
-      const tags = buildTags(ev);
-      return `<div class="loc-ev">
-        <div class="loc-ev-date">${fmtDateShort(ev.date)}<br><span style="color:#C8C8C0">${fmtTime(ev.date)}</span></div>
-        <div class="loc-ev-body">
-          <div class="loc-ev-name">${escHtml(ev.summary)}</div>
-          ${ev.host ? `<div class="loc-ev-host">${escHtml(ev.host)}</div>` : ''}
-          ${tags ? `<div class="ec-tags" style="margin-top:4px">${tags}</div>` : ''}
-        </div>
-        ${ev.url ? `<a class="loc-ev-link" href="${escHtml(ev.url)}" target="_blank" rel="noopener">↗</a>` : ''}
-      </div>`;
-    }).join('');
+    const evItems = evs.map(ev => eventCard(ev)).join('');
     html += `<div class="loc-group">
       <div class="loc-hd" onclick="toggleLoc(this)">
         <div class="loc-hd-left">
@@ -467,18 +456,13 @@ function renderMap() {
       radius: r, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.85,
     });
 
-    const items = events.map((ev, i) => {
-      const tags = buildTags(ev);
-      return `${i > 0 ? '<hr class="lf-popup-sep">' : ''}
-        <div class="lf-popup-title">${escHtml(ev.summary)}</div>
-        <div class="lf-popup-meta">${fmtDate(ev.date)} · ${fmtTime(ev.date)}</div>
-        ${tags ? `<div class="lf-popup-tags">${tags}</div>` : ''}
-        ${ev.url ? `<a class="lf-popup-link" href="${escHtml(ev.url)}" target="_blank" rel="noopener">View on TOaST ↗</a>` : ''}`;
-    }).join('');
+    const items = events.map((ev, i) =>
+      `${i > 0 ? '<hr class="lf-popup-sep">' : ''}${eventCard(ev)}`
+    ).join('');
 
     marker.bindPopup(
-      `<div style="max-width:280px;max-height:320px;overflow-y:auto;font-family:'Inter',sans-serif">${items}</div>`,
-      { maxWidth: 300 }
+      `<div style="max-width:340px;max-height:420px;overflow-y:auto;font-family:'Inter',sans-serif;padding:4px">${items}</div>`,
+      { maxWidth: 360 }
     );
     if (markerLayer) marker.addTo(markerLayer);
   }

@@ -89,6 +89,12 @@ a{color:inherit;text-decoration:none}
 .tag-ota{background:#FFF8E1;color:#E65100}
 .tag-wftda{background:#FCE4EC;color:#880E4F}
 
+/* GAMES LIST inside card */
+.ec-games{display:flex;flex-direction:column;gap:3px;border-top:1px solid #F0F0E8;padding-top:6px;margin-top:2px}
+.ec-game{display:flex;align-items:center;gap:8px;font-size:0.78rem;color:#444}
+.ec-game-team{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-game-vs{font-size:0.65rem;font-weight:700;color:#BBB;flex-shrink:0;font-family:'Oswald',sans-serif}
+
 /* LOCATION VIEW */
 .loc-group{border:1px solid #EAEAE4;border-radius:12px;overflow:hidden;background:#fff;transition:box-shadow 0.12s}
 .loc-group:hover{box-shadow:0 2px 10px rgba(0,0,0,0.06)}
@@ -259,6 +265,11 @@ function buildTags(ev) {
 function eventCard(ev) {
   const tags = buildTags(ev);
   const host = ev.host ? `<span class="pipe">·</span>${escHtml(ev.host)}` : '';
+  const gamesList = (ev.games && ev.games.length)
+    ? `<div class="ec-games">${ev.games.map(g =>
+        `<div class="ec-game"><span class="ec-game-team">${escHtml(g.home)}</span><span class="ec-game-vs">v</span><span class="ec-game-team">${escHtml(g.away)}</span></div>`
+      ).join('')}</div>`
+    : '';
   return `<div class="ec">
     <div class="ec-top">
       <div class="ec-name">${escHtml(ev.summary)}</div>
@@ -270,6 +281,7 @@ function eventCard(ev) {
       ${host}
     </div>
     ${tags ? `<div class="ec-tags">${tags}</div>` : ''}
+    ${gamesList}
   </div>`;
 }
 

@@ -1,8 +1,15 @@
+import asyncio
+import logging
+import os
 import re
 import httpx
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone
 
-ICS_URL = "https://rollerderby.directory/calendar.ics"
+logger = logging.getLogger(__name__)
+
+TOAST_BASE = "https://rollerderby.directory"
+ICS_URL = f"{TOAST_BASE}/calendar.ics"
 
 COORDS = {
     'hull': [53.7457, -0.3367],
@@ -204,6 +211,81 @@ def classify(summary: str) -> dict:
     }
 
 
+async def login(client: httpx.AsyncClient) -> bool:
+    """Log in to TOaST. Returns True if successful."""
+    email = os.environ.get("TOAST_EMAIL", "")
+    password = os.environ.get("TOAST_PASSWORD", "")
+    if not email or not password:
+        logger.warning("TOAST_EMAIL / TOAST_PASSWORD not set — skipping login")
+        return False
+    try:
+        resp = await client.get(f"{TOAST_BASE}/accounts/login/")
+        m = re.search(r'name="csrfmiddlewaretoken"[^>]*value="([^"]+)"', resp.text)
+        if not m:
+            logger.warning("Login: could not find CSRF token")
+            return False
+        csrf = m.group(1)
+        login_resp = await client.post(
+            f"{TOAST_BASE}/accounts/login/",
+            data={"csrfmiddlewaretoken": csrf, "username": email, "password": password, "next": ""},
+            headers={"Referer": f"{TOAST_BASE}/accounts/login/"},
+            follow_redirects=True,
+        )
+        success = "/accounts/login/" not in str(login_resp.url)
+        logger.info("Login %s", "succeeded" if success else "FAILED — check credentials")
+        return success
+    except Exception as exc:
+        logger.error("Login error: %s", exc)
+        return False
+
+
+async def fetch_event_games(client: httpx.AsyncClient, url: str, sem: asyncio.Semaphore) -> list[dict]:
+    """
+    Fetch individual game matchups from an event page.
+    Returns a list of {home, away} dicts, or [] if unavailable / not parseable.
+    """
+    async with sem:
+        try:
+            resp = await client.get(url, follow_redirects=True, timeout=10)
+            if resp.status_code != 200 or "/accounts/login/" in str(resp.url):
+                return []
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            games = []
+
+            # Strategy 1: find tables whose headers look like bout/game listings
+            for table in soup.find_all("table"):
+                headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+                if any(h in headers for h in ["home", "away", "team 1", "team 2", "game", "bout"]):
+                    for row in table.find_all("tr")[1:]:
+                        cells = [td.get_text(strip=True) for td in row.find_all("td")]
+                        if len(cells) >= 2 and cells[0] and cells[1]:
+                            games.append({"home": cells[0], "away": cells[1]})
+
+            # Strategy 2: scan list items / short paragraphs for "A v B" / "A vs B"
+            if not games:
+                seen = set()
+                for el in soup.find_all(["li", "p", "td", "div"]):
+                    text = el.get_text(" ", strip=True)
+                    if text in seen or len(text) > 120:
+                        continue
+                    seen.add(text)
+                    m = re.match(r'^(.{3,60}?)\s+vs?\.?\s+(.{3,60})$', text, re.IGNORECASE)
+                    if m:
+                        home, away = m.group(1).strip(), m.group(2).strip()
+                        # Skip navigation / UI noise
+                        if not any(w in home.lower() for w in ["login", "menu", "home", "calendar"]):
+                            games.append({"home": home, "away": away})
+
+            if games:
+                logger.debug("Found %d games at %s", len(games), url)
+            return games
+
+        except Exception as exc:
+            logger.warning("Could not fetch games from %s: %s", url, exc)
+            return []
+
+
 def expand_multi_tier(event: dict) -> list[dict]:
     """Split 'T1 and T3' style summaries into two separate events."""
     m = re.search(r'\bT([1-5])\s+and\s+T([1-5])\b', event['summary'], re.IGNORECASE)
@@ -225,19 +307,41 @@ def expand_multi_tier(event: dict) -> list[dict]:
 
 
 async def fetch_events() -> list[dict]:
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.get(ICS_URL, follow_redirects=True)
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        # Fetch ICS — this always works regardless of auth
+        resp = await client.get(ICS_URL)
         resp.raise_for_status()
-        text = resp.text
+        raw = parse_ics(resp.text)
 
-    raw = parse_ics(text)
-    events = []
-    for e in raw:
-        for ev in expand_multi_tier(e):
-            events.append({
-                **ev,
-                **classify(ev['summary']),
-                'coords': geocode(ev['location']),
-            })
+        # Build base events
+        events = []
+        for e in raw:
+            for ev in expand_multi_tier(e):
+                events.append({
+                    **ev,
+                    **classify(ev['summary']),
+                    'coords': geocode(ev['location']),
+                    'games': [],
+                })
+
+        # Try to enrich with individual game data from event pages
+        logged_in = await login(client)
+        if logged_in:
+            sem = asyncio.Semaphore(5)  # max 5 concurrent requests
+            tasks = {
+                ev['uid']: asyncio.create_task(
+                    fetch_event_games(client, ev['url'], sem)
+                )
+                for ev in events if ev.get('url')
+            }
+            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            uid_to_games = dict(zip(tasks.keys(), results))
+
+            for ev in events:
+                result = uid_to_games.get(ev['uid'])
+                if isinstance(result, list):
+                    ev['games'] = result
+            logger.info("Game enrichment complete (%d events had game data)",
+                        sum(1 for g in uid_to_games.values() if isinstance(g, list) and g))
 
     return sorted(events, key=lambda x: x['date'])

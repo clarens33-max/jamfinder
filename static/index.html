@@ -196,7 +196,7 @@ footer a{color:#E91E8C}
     <button class="chip" data-filter="type" data-value="wftda">WFTDA</button>
     <button class="chip" data-filter="type" data-value="mrda">MRDA</button>
     <button class="chip" data-filter="type" data-value="ota">OTA</button>
-    <button class="chip" data-filter="type" data-value="junior">Junior</button>
+    <button class="chip" data-filter="type" data-value="junior">JRDA</button>
     <span class="fl" style="margin-left:8px">5N Tier</span>
     <button class="chip on" data-filter="tier" data-value="all">All</button>
     <button class="chip" data-filter="tier" data-value="1">T1</button>
@@ -350,7 +350,8 @@ function matchesFilters(ev) {
   // Search
   if (filters.search) {
     const q = filters.search.toLowerCase();
-    if (!`${ev.summary} ${ev.location} ${ev.host} ${ev.description}`.toLowerCase().includes(q)) return false;
+    const gameTeams = (ev.games || []).map(g => `${g.home} ${g.away}`).join(' ');
+    if (!`${ev.summary} ${ev.location} ${ev.host} ${ev.description} ${gameTeams}`.toLowerCase().includes(q)) return false;
   }
   return true;
 }

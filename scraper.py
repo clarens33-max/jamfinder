@@ -247,7 +247,8 @@ async def fetch_event_details(client: httpx.AsyncClient, url: str, sem: asyncio.
     empty = {"games": [], "address": None, "timings": None}
     async with sem:
         try:
-            resp = await client.get(url, follow_redirects=True, timeout=10)
+            await asyncio.sleep(2)  # be polite — one request every 2 seconds
+            resp = await client.get(url, follow_redirects=True, timeout=15)
             if resp.status_code != 200 or "/accounts/login/" in str(resp.url):
                 return empty
 
@@ -358,7 +359,7 @@ async def fetch_events() -> list[dict]:
         # Try to enrich with games + address + timings from event pages
         logged_in = await login(client)
         if logged_in:
-            sem = asyncio.Semaphore(5)  # max 5 concurrent requests
+            sem = asyncio.Semaphore(1)  # sequential — avoid hammering the server
             # Deduplicate by original URL (split events share the same page)
             url_to_uids: dict[str, list[str]] = {}
             for ev in events:

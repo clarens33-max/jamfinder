@@ -280,6 +280,7 @@ async def fetch_event_details(client: httpx.AsyncClient, url: str, sem: asyncio.
             # ── Info tab (#details) ─────────────────────────────────────────
             details_pane = soup.find(id="details")
             if details_pane:
+                divisions = []
                 for row in details_pane.find_all("tr"):
                     th = row.find("th")
                     td = row.find("td")
@@ -296,6 +297,14 @@ async def fetch_event_details(client: httpx.AsyncClient, url: str, sem: asyncio.
                         pre = td.find("pre")
                         if pre:
                             result["timings"] = pre.get_text(strip=True)
+
+                    elif "division" in label:
+                        for badge in td.find_all("span", class_="badge-info"):
+                            div_text = badge.get_text(strip=True)
+                            if div_text and div_text not in divisions:
+                                divisions.append(div_text)
+
+                result["divisions"] = divisions
 
             if result["games"]:
                 logger.debug("Found %d games at %s", len(result["games"]), url)
@@ -370,10 +379,23 @@ async def fetch_events() -> list[dict]:
                     continue
                 for uid in uids:
                     ev = uid_index.get(uid)
-                    if ev:
-                        ev['games'] = details.get('games', [])
-                        ev['address'] = details.get('address')
-                        ev['timings'] = details.get('timings')
+                    if not ev:
+                        continue
+                    ev['games'] = details.get('games', [])
+                    ev['address'] = details.get('address')
+                    ev['timings'] = details.get('timings')
+
+                    # Fill in tier/is5N from division badges when title regex missed them
+                    divisions = details.get('divisions', [])
+                    if divisions:
+                        if not ev['tier']:
+                            for div in divisions:
+                                m = re.match(r'T([1-5])', div, re.IGNORECASE)
+                                if m:
+                                    ev['tier'] = int(m.group(1))
+                                    break
+                        if not ev['is5N']:
+                            ev['is5N'] = True  # division badges imply 5NRD
 
             enriched = sum(
                 1 for d in url_to_details.values()

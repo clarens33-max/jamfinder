@@ -239,51 +239,71 @@ async def login(client: httpx.AsyncClient) -> bool:
         return False
 
 
-async def fetch_event_games(client: httpx.AsyncClient, url: str, sem: asyncio.Semaphore) -> list[dict]:
+async def fetch_event_details(client: httpx.AsyncClient, url: str, sem: asyncio.Semaphore) -> dict:
     """
-    Fetch individual game matchups from an event page.
-    Returns a list of {home, away} dicts, or [] if unavailable / not parseable.
+    Fetch games and info from a TOaST event page.
+    Returns {games: [...], address: str|None, timings: str|None}
     """
+    empty = {"games": [], "address": None, "timings": None}
     async with sem:
         try:
             resp = await client.get(url, follow_redirects=True, timeout=10)
             if resp.status_code != 200 or "/accounts/login/" in str(resp.url):
-                return []
+                return empty
 
             soup = BeautifulSoup(resp.text, "html.parser")
-            games = []
+            result = {"games": [], "address": None, "timings": None}
 
-            # Strategy 1: find tables whose headers look like bout/game listings
-            for table in soup.find_all("table"):
-                headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-                if any(h in headers for h in ["home", "away", "team 1", "team 2", "game", "bout"]):
-                    for row in table.find_all("tr")[1:]:
-                        cells = [td.get_text(strip=True) for td in row.find_all("td")]
-                        if len(cells) >= 2 and cells[0] and cells[1]:
-                            games.append({"home": cells[0], "away": cells[1]})
-
-            # Strategy 2: scan list items / short paragraphs for "A v B" / "A vs B"
-            if not games:
-                seen = set()
-                for el in soup.find_all(["li", "p", "td", "div"]):
-                    text = el.get_text(" ", strip=True)
-                    if text in seen or len(text) > 120:
+            # ── Games tab (#games) ───────────────────────────────────────────
+            games_pane = soup.find(id="games")
+            if games_pane:
+                for row in games_pane.find_all("tr")[1:]:  # skip header row
+                    cells = row.find_all("td")
+                    if len(cells) < 2:
                         continue
-                    seen.add(text)
-                    m = re.match(r'^(.{3,60}?)\s+vs?\.?\s+(.{3,60})$', text, re.IGNORECASE)
-                    if m:
-                        home, away = m.group(1).strip(), m.group(2).strip()
-                        # Skip navigation / UI noise
-                        if not any(w in home.lower() for w in ["login", "menu", "home", "calendar"]):
-                            games.append({"home": home, "away": away})
+                    # Strip badge spans so we get clean team names
+                    for cell in cells:
+                        for span in cell.find_all("span"):
+                            span.decompose()
+                    home = cells[0].get_text(strip=True)
+                    away = cells[1].get_text(strip=True)
+                    association = cells[2].get_text(strip=True) if len(cells) > 2 else ""
+                    game_type = cells[3].get_text(strip=True) if len(cells) > 3 else ""
+                    if home and away:
+                        result["games"].append({
+                            "home": home,
+                            "away": away,
+                            "association": association,
+                            "gameType": game_type,
+                        })
 
-            if games:
-                logger.debug("Found %d games at %s", len(games), url)
-            return games
+            # ── Info tab (#details) ─────────────────────────────────────────
+            details_pane = soup.find(id="details")
+            if details_pane:
+                for row in details_pane.find_all("tr"):
+                    th = row.find("th")
+                    td = row.find("td")
+                    if not th or not td:
+                        continue
+                    label = th.get_text(strip=True).lower()
+
+                    if label == "address":
+                        for a in td.find_all("a"):
+                            a.decompose()
+                        result["address"] = td.get_text(strip=True)
+
+                    elif label == "timings":
+                        pre = td.find("pre")
+                        if pre:
+                            result["timings"] = pre.get_text(strip=True)
+
+            if result["games"]:
+                logger.debug("Found %d games at %s", len(result["games"]), url)
+            return result
 
         except Exception as exc:
-            logger.warning("Could not fetch games from %s: %s", url, exc)
-            return []
+            logger.warning("Could not fetch details from %s: %s", url, exc)
+            return empty
 
 
 def expand_multi_tier(event: dict) -> list[dict]:
@@ -322,26 +342,44 @@ async def fetch_events() -> list[dict]:
                     **classify(ev['summary']),
                     'coords': geocode(ev['location']),
                     'games': [],
+                    'address': None,
+                    'timings': None,
                 })
 
-        # Try to enrich with individual game data from event pages
+        # Try to enrich with games + address + timings from event pages
         logged_in = await login(client)
         if logged_in:
             sem = asyncio.Semaphore(5)  # max 5 concurrent requests
-            tasks = {
-                ev['uid']: asyncio.create_task(
-                    fetch_event_games(client, ev['url'], sem)
-                )
-                for ev in events if ev.get('url')
-            }
-            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-            uid_to_games = dict(zip(tasks.keys(), results))
-
+            # Deduplicate by original URL (split events share the same page)
+            url_to_uids: dict[str, list[str]] = {}
             for ev in events:
-                result = uid_to_games.get(ev['uid'])
-                if isinstance(result, list):
-                    ev['games'] = result
-            logger.info("Game enrichment complete (%d events had game data)",
-                        sum(1 for g in uid_to_games.values() if isinstance(g, list) and g))
+                if ev.get('url'):
+                    url_to_uids.setdefault(ev['url'], []).append(ev['uid'])
+
+            tasks = {
+                url: asyncio.create_task(fetch_event_details(client, url, sem))
+                for url in url_to_uids
+            }
+            detail_results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            url_to_details = dict(zip(tasks.keys(), detail_results))
+
+            uid_index = {ev['uid']: ev for ev in events}
+            for url, uids in url_to_uids.items():
+                details = url_to_details.get(url)
+                if not isinstance(details, dict):
+                    continue
+                for uid in uids:
+                    ev = uid_index.get(uid)
+                    if ev:
+                        ev['games'] = details.get('games', [])
+                        ev['address'] = details.get('address')
+                        ev['timings'] = details.get('timings')
+
+            enriched = sum(
+                1 for d in url_to_details.values()
+                if isinstance(d, dict) and d.get('games')
+            )
+            logger.info("Enrichment complete: %d/%d event pages had game data",
+                        enriched, len(url_to_details))
 
     return sorted(events, key=lambda x: x['date'])

@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jam Finder – UK Roller Derby Events</title>
+<meta name="description" content="All UK roller derby events in one place. Data from rollerderby.directory (TOaST).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#F7F7F5;color:#1C1C1C;min-height:100vh;font-size:15px}
+a{color:inherit;text-decoration:none}
+
+/* HEADER */
+.header{background:#1C1C1C;color:#fff;padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.logo{font-family:'Oswald',sans-serif;font-size:1.75rem;font-weight:700;letter-spacing:0.04em;line-height:1}
+.logo em{color:#E91E8C;font-style:normal}
+.logo-sub{font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:3px;letter-spacing:0.06em;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.badge{font-size:0.7rem;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.65);padding:4px 12px;border-radius:20px;white-space:nowrap}
+.badge.loading{background:rgba(233,30,140,0.2);color:#E91E8C}
+.badge.error{background:rgba(220,50,50,0.2);color:#ff6b6b}
+.toast-link{font-size:0.72rem;color:rgba(255,255,255,0.45);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:4px 12px;transition:color 0.1s,border-color 0.1s}
+.toast-link:hover{color:rgba(255,255,255,0.8);border-color:rgba(255,255,255,0.35)}
+
+/* FILTERS */
+.filters{background:#fff;border-bottom:1px solid #EAEAE4;padding:0.875rem 1.5rem;position:sticky;top:0;z-index:200;box-shadow:0 1px 6px rgba(0,0,0,0.05)}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.filter-row:last-child{margin-bottom:0}
+.search-wrap{position:relative;flex:1;min-width:180px;max-width:320px}
+.search-wrap::before{content:"🔍";position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none}
+#search{width:100%;padding:6px 10px 6px 32px;border:1.5px solid #E0E0D8;border-radius:8px;font-family:'Inter',sans-serif;font-size:0.83rem;outline:none;background:#FAFAF8;transition:border-color 0.15s}
+#search:focus{border-color:#E91E8C}
+.fl{font-size:0.68rem;color:#AAA;text-transform:uppercase;letter-spacing:0.07em;font-weight:600;margin-right:2px;flex-shrink:0}
+.chip{padding:4px 12px;border:1.5px solid #E0E0D8;border-radius:20px;background:transparent;font-family:'Inter',sans-serif;font-size:0.76rem;cursor:pointer;color:#666;transition:all 0.12s;white-space:nowrap;line-height:1.5}
+.chip:hover{border-color:#E91E8C;color:#E91E8C}
+.chip.on{background:#E91E8C;border-color:#E91E8C;color:#fff;font-weight:500}
+#results-info{font-size:0.75rem;color:#999;margin-left:auto;white-space:nowrap}
+
+/* TABS */
+.tabs{background:#fff;border-bottom:2px solid #EAEAE4;padding:0 1.5rem;display:flex}
+.tab{padding:0.7rem 1.1rem;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;background:transparent;font-family:'Inter',sans-serif;font-size:0.85rem;font-weight:500;color:#999;cursor:pointer;transition:all 0.12s;letter-spacing:0.01em}
+.tab:hover{color:#1C1C1C}
+.tab.on{color:#E91E8C;border-bottom-color:#E91E8C}
+
+/* MAP */
+#map-view{}
+#map{height:62vh;min-height:340px}
+.map-legend{padding:0.75rem 1.5rem;background:#fff;border-bottom:1px solid #EAEAE4;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:0.75rem;color:#666}
+.leg-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+
+/* CONTENT AREA */
+.content{padding:1.25rem 1.5rem;max-width:860px;margin:0 auto}
+.hidden{display:none!important}
+
+/* DATE GROUP HEADER */
+.date-group-hd{font-family:'Oswald',sans-serif;font-size:0.8rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#AAA;padding:1.25rem 0 0.6rem;border-bottom:1px solid #EAEAE4;margin-bottom:0.6rem}
+.date-group-hd:first-child{padding-top:0}
+.date-day-hd{font-size:0.72rem;font-weight:500;color:#C0C0B8;text-transform:uppercase;letter-spacing:0.07em;padding:0.5rem 0 0.3rem;margin-top:0.35rem}
+.event-grid{display:flex;flex-direction:column;gap:8px}
+
+/* EVENT CARDS */
+.ec{background:#fff;border:1px solid #EAEAE4;border-radius:12px;padding:12px 15px;display:flex;flex-direction:column;gap:6px;transition:box-shadow 0.12s,border-color 0.12s;cursor:default}
+.ec:hover{box-shadow:0 2px 14px rgba(0,0,0,0.08);border-color:#CCCCCC}
+.ec-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ec-name{font-family:'Oswald',sans-serif;font-size:0.98rem;font-weight:600;letter-spacing:0.01em;color:#1C1C1C;line-height:1.25;flex:1}
+.ec-link{font-size:0.7rem;color:#E91E8C;white-space:nowrap;font-weight:500;flex-shrink:0;padding-top:2px}
+.ec-link:hover{text-decoration:underline}
+.ec-meta{font-size:0.78rem;color:#777;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ec-meta .pipe{color:#D0D0C8}
+.ec-tags{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+
+/* TAGS */
+.tag{padding:2px 8px;border-radius:4px;font-size:0.67rem;font-weight:600;letter-spacing:0.04em;white-space:nowrap;text-transform:uppercase}
+.tag-5n{background:#F3E5F5;color:#6A1B9A}
+.tag-t1{background:#FCE4EC;color:#880E4F}
+.tag-t2{background:#FFF3E0;color:#BF360C}
+.tag-t3{background:#FFF8E1;color:#F57F17}
+.tag-t4{background:#E8F5E9;color:#2E7D32}
+.tag-t5{background:#E3F2FD;color:#1565C0}
+.tag-scrim{background:#F5F5F5;color:#555}
+.tag-rookie{background:#E0F2F1;color:#00695C}
+.tag-tournament{background:#FBE9E7;color:#BF360C}
+.tag-mrda{background:#E8EAF6;color:#283593}
+.tag-junior{background:#F1F8E9;color:#33691E}
+.tag-open{background:#E1F5FE;color:#01579B}
+
+/* LOCATION VIEW */
+.loc-group{border:1px solid #EAEAE4;border-radius:12px;overflow:hidden;background:#fff;transition:box-shadow 0.12s}
+.loc-group:hover{box-shadow:0 2px 10px rgba(0,0,0,0.06)}
+.loc-hd{display:flex;align-items:center;justify-content:space-between;padding:13px 15px;cursor:pointer;user-select:none;gap:10px;transition:background 0.1s}
+.loc-hd:hover{background:#FAFAF8}
+.loc-hd-left{display:flex;align-items:center;gap:10px}
+.loc-pin{font-size:15px}
+.loc-name{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;letter-spacing:0.01em}
+.loc-count{font-size:0.72rem;background:#F5F5F0;color:#777;padding:2px 8px;border-radius:10px}
+.loc-chevron{font-size:12px;color:#BBB;transition:transform 0.15s}
+.loc-group.open .loc-chevron{transform:rotate(90deg)}
+.loc-events{display:none;border-top:1px solid #EAEAE4;padding:4px 0 4px}
+.loc-group.open .loc-events{display:block}
+.loc-ev{display:flex;align-items:flex-start;gap:12px;padding:9px 15px;border-bottom:1px solid #F5F5F0;transition:background 0.1s}
+.loc-ev:last-child{border-bottom:none}
+.loc-ev:hover{background:#FAFAF8}
+.loc-ev-date{font-size:0.72rem;color:#AAA;min-width:72px;flex-shrink:0;padding-top:1px}
+.loc-ev-body{flex:1;min-width:0}
+.loc-ev-name{font-size:0.875rem;font-weight:500;color:#1C1C1C;margin-bottom:3px;line-height:1.3}
+.loc-ev-host{font-size:0.75rem;color:#999}
+.loc-ev-link{font-size:0.7rem;color:#E91E8C;flex-shrink:0}
+.loc-ev-link:hover{text-decoration:underline}
+.loc-grid{display:flex;flex-direction:column;gap:8px}
+
+/* EMPTY STATE */
+.empty{text-align:center;padding:3rem 1rem;color:#AAA}
+.empty h2{font-family:'Oswald',sans-serif;font-size:1.5rem;margin-bottom:0.5rem;color:#666}
+.empty p{font-size:0.875rem}
+
+/* POPUP */
+.lf-popup-title{font-family:'Oswald',sans-serif;font-size:0.95rem;font-weight:600;color:#1C1C1C;margin-bottom:3px;line-height:1.3}
+.lf-popup-meta{font-size:0.75rem;color:#777;margin-bottom:6px}
+.lf-popup-tags{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px}
+.lf-popup-link{font-size:0.72rem;color:#E91E8C;font-weight:500}
+.lf-popup-link:hover{text-decoration:underline}
+.lf-popup-sep{border:none;border-top:1px solid #EEE;margin:8px 0}
+
+/* MAP SELECTED LIST */
+#map-event-list{padding:1rem 1.5rem;background:#fff;border-top:1px solid #EAEAE4}
+
+/* FOOTER */
+footer{text-align:center;padding:2rem 1.5rem;font-size:0.75rem;color:#AAA;border-top:1px solid #EAEAE4;margin-top:2rem;line-height:1.8}
+footer a{color:#E91E8C}
+
+/* LOADING SPINNER */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(233,30,140,0.3);border-top-color:#E91E8C;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* RESPONSIVE */
+@media(max-width:640px){
+  .header{padding:0.875rem 1rem}
+  .logo{font-size:1.4rem}
+  .filters{padding:0.75rem 1rem}
+  .content{padding:1rem}
+  #map{height:50vh}
+  .map-legend{padding:0.6rem 1rem}
+  .tabs{padding:0 0.75rem}
+  .tab{padding:0.6rem 0.8rem;font-size:0.8rem}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div>
+    <div class="logo">JAM<em>FINDER</em></div>
+    <div class="logo-sub">UK Roller Derby Events</div>
+  </div>
+  <div class="header-right">
+    <span class="badge loading" id="status-badge"><span class="spinner"></span>Loading…</span>
+    <a class="toast-link" href="https://rollerderby.directory" target="_blank" rel="noopener">Data: TOaST ↗</a>
+  </div>
+</header>
+
+<div class="filters">
+  <div class="filter-row">
+    <div class="search-wrap">
+      <input type="text" id="search" placeholder="Search events, teams, cities…" autocomplete="off">
+    </div>
+    <span class="fl" style="margin-left:8px">When</span>
+    <button class="chip on" data-filter="time" data-value="upcoming">Upcoming</button>
+    <button class="chip" data-filter="time" data-value="all">All 2026</button>
+    <span id="results-info"></span>
+  </div>
+  <div class="filter-row">
+    <span class="fl">Type</span>
+    <button class="chip on" data-filter="type" data-value="all">All</button>
+    <button class="chip" data-filter="type" data-value="5n">5 Nations</button>
+    <button class="chip" data-filter="type" data-value="scrim">Scrims</button>
+    <button class="chip" data-filter="type" data-value="tournament">Tournaments</button>
+    <button class="chip" data-filter="type" data-value="rookie">Rookie</button>
+    <button class="chip" data-filter="type" data-value="mrda">MRDA</button>
+    <button class="chip" data-filter="type" data-value="junior">Junior</button>
+    <span class="fl" style="margin-left:8px">5N Tier</span>
+    <button class="chip on" data-filter="tier" data-value="all">All</button>
+    <button class="chip" data-filter="tier" data-value="1">T1</button>
+    <button class="chip" data-filter="tier" data-value="2">T2</button>
+    <button class="chip" data-filter="tier" data-value="3">T3</button>
+    <button class="chip" data-filter="tier" data-value="4">T4</button>
+    <button class="chip" data-filter="tier" data-value="5">T5</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab on" data-view="map">🗺 Map</button>
+  <button class="tab" data-view="timeline">📅 Timeline</button>
+  <button class="tab" data-view="locations">📍 By Location</button>
+</div>
+
+<div id="map-view">
+  <div id="map"></div>
+  <div class="map-legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#7B1FA2"></div>5 Nations</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#E91E8C"></div>Open / Bout</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#555"></div>Scrim</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#00897B"></div>Rookie</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#1565C0"></div>Junior / MRDA</div>
+    <span style="font-size:0.72rem;color:#BBB;margin-left:auto">Click a marker for details</span>
+  </div>
+  <div id="map-event-list" class="hidden"></div>
+</div>
+
+<div id="timeline-view" class="content hidden"></div>
+<div id="locations-view" class="content hidden"></div>
+
+<footer>
+  All event data is sourced from <a href="https://rollerderby.directory" target="_blank" rel="noopener">rollerderby.directory (TOaST)</a> — UK Roller Derby Officials Planner.<br>
+  Jam Finder is a community viewer only. To volunteer as a referee or NSO, or to create/edit events, please visit TOaST directly.<br>
+  Events refresh automatically each time this page loads.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─── COORDINATE LOOKUP ─────────────────────────────────────────────────────
+const COORDS = {
+  'hull': [53.7457, -0.3367],
+  'cheltenham': [51.8994, -2.0783],
+  'belfast': [54.5973, -5.9301],
+  'guildford': [51.2362, -0.5704],
+  'havant': [50.8561, -1.0059],
+  'portsmouth': [50.8148, -1.0877],
+  'cardiff': [51.4816, -3.1791],
+  'london': [51.5074, -0.1278],
+  'waterford': [52.2593, -7.1101],
+  'ireland': [53.4129, -8.2439],
+  'bideford': [51.0167, -4.2000],
+  'glasgow': [55.8642, -4.2518],
+  'kirkwall': [58.9809, -2.9600],
+  'orkney': [58.9809, -2.9600],
+  'manchester': [53.4808, -2.2426],
+  'edinburgh': [55.9533, -3.1883],
+  'bournemouth': [50.7192, -1.8808],
+  'sheffield': [53.3811, -1.4701],
+  'gloucester': [51.8640, -2.2441],
+  'liverpool': [53.4084, -2.9916],
+  'stoke': [53.0027, -2.1794],
+  'stoke on trent': [53.0027, -2.1794],
+  'stoke-on-trent': [53.0027, -2.1794],
+  'bedford': [52.1386, -0.4667],
+  'york': [53.9600, -1.0800],
+  'durham': [54.7761, -1.5733],
+  'bristol': [51.4545, -2.5879],
+  'nottingham': [52.9548, -1.1581],
+  'haywards heath': [51.0047, -0.0960],
+  'andover': [51.2083, -1.4833],
+  'high wycombe': [51.6283, -0.7483],
+  'wycombe': [51.6283, -0.7483],
+  'keynsham': [51.4136, -2.4904],
+  'merthyr': [51.7461, -3.3762],
+  'birmingham': [52.4862, -1.8904],
+  'salford': [53.4875, -2.2901],
+  'newcastle upon tyne': [54.9783, -1.6178],
+  'newcastle': [54.9783, -1.6178],
+  'gateshead': [54.9526, -1.6014],
+  'flint': [53.2484, -3.1367],
+  'chelmsford': [51.7356, 0.4685],
+  'barrow-in-furness': [54.1108, -3.2266],
+  'barrow': [54.1108, -3.2266],
+  'herne bay': [51.3737, 1.1213],
+  'neath': [51.6602, -3.8067],
+  'cambridge': [52.2053, 0.1218],
+  'oxford': [51.7520, -1.2577],
+  'maidstone': [51.2720, 0.5290],
+  'leicester': [52.6369, -1.1398],
+  'dalkeith': [55.8947, -3.0622],
+  'wirral': [53.3727, -3.1000],
+  'dundee': [56.4620, -2.9707],
+  'eastbourne': [50.7680, 0.2843],
+  'leeds': [53.8008, -1.5491],
+  'norwich': [52.6309, 1.2974],
+  'norfolk': [52.6143, 1.0226],
+  'bath': [51.3811, -2.3590],
+  'coventry': [52.4068, -1.5197],
+  'brighton': [50.8225, -0.1372],
+};
+
+function geocode(location) {
+  if (!location) return null;
+  const raw = location.toLowerCase().replace(/[()]/g, ' ').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  // Direct match
+  if (COORDS[raw]) return COORDS[raw];
+  // Try sub-phrases from longest to shortest
+  const words = raw.split(' ');
+  for (let len = words.length; len >= 1; len--) {
+    for (let start = 0; start <= words.length - len; start++) {
+      const phrase = words.slice(start, start + len).join(' ');
+      if (COORDS[phrase]) return COORDS[phrase];
+    }
+  }
+  return null;
+}
+
+// ─── ICS PARSING ────────────────────────────────────────────────────────────
+function parseICS(text) {
+  // Unfold continuation lines
+  const unfolded = text.replace(/\r?\n[ \t]/g, '');
+  const lines = unfolded.split(/\r?\n/);
+  const events = [];
+  let cur = null;
+
+  for (const line of lines) {
+    if (line === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (line === 'END:VEVENT' && cur) { events.push(cur); cur = null; continue; }
+    if (!cur) continue;
+    const colon = line.indexOf(':');
+    if (colon < 1) continue;
+    const key = line.slice(0, colon).split(';')[0].toUpperCase();
+    const val = line.slice(colon + 1);
+    cur[key] = val;
+  }
+
+  return events.map(e => {
+    const dtstr = e.DTSTART || '';
+    const m = dtstr.match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+    const date = m ? new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${dtstr.endsWith('Z') ? 'Z' : ''}`) : null;
+    const desc = (e.DESCRIPTION || '').replace(/\\n/g, '\n').replace(/\\/g, '').trim();
+    const hostMatch = desc.match(/^(.+?)\s+host\s+in/i);
+    return {
+      uid: e.UID || '',
+      summary: (e.SUMMARY || '').trim(),
+      location: (e.LOCATION || '').trim(),
+      description: desc,
+      url: (e.URL || '').trim(),
+      host: hostMatch ? hostMatch[1].trim() : '',
+      date,
+    };
+  }).filter(e => e.date && !isNaN(e.date));
+}
+
+// ─── EVENT CLASSIFICATION ───────────────────────────────────────────────────
+function classify(e) {
+  const s = e.summary;
+  const is5N = /5\s*[Nn](ations?|rd)?|five\s*nations/i.test(s);
+
+  let tier = null;
+  const tm = s.match(/\bT([1-5])(?:[^0-9]|$)/i);
+  const tw = s.match(/[Tt]ier\s*([1-5])/);
+  if (tm) tier = parseInt(tm[1]);
+  else if (tw) tier = parseInt(tw[1]);
+
+  const isScrim   = /\bscrim\b|closed\s*door/i.test(s);
+  const isRookie  = /\brookies?\b/i.test(s);
+  const isMRDA    = /\bMRDA\b/i.test(s);
+  const isJunior  = /\b(JRDA|[Jj]unior)\b/.test(s);
+  const isTournament = /\b(tournament|cup|weekender|big\s*weekend|showdown|showcase|championship|playoffs?)\b/i.test(s);
+  const isOpen    = /open\s*(wftda|scrim)/i.test(s);
+
+  return { is5N, tier, isScrim, isRookie, isMRDA, isJunior, isTournament, isOpen };
+}
+
+// ─── FORMATTING ─────────────────────────────────────────────────────────────
+function fmtDate(d) {
+  return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
+}
+function fmtDateShort(d) {
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', timeZone:'UTC' });
+}
+function fmtMonth(d) {
+  return d.toLocaleDateString('en-GB', { month:'long', year:'numeric', timeZone:'UTC' });
+}
+function fmtTime(d) {
+  return d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'UTC' });
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function buildTags(ev) {
+  const tags = [];
+  if (ev.is5N) tags.push(`<span class="tag tag-5n">5 Nations</span>`);
+  if (ev.tier) tags.push(`<span class="tag tag-t${ev.tier}">Tier ${ev.tier}</span>`);
+  if (ev.isRookie) tags.push(`<span class="tag tag-rookie">Rookie</span>`);
+  if (ev.isMRDA) tags.push(`<span class="tag tag-mrda">MRDA</span>`);
+  if (ev.isJunior) tags.push(`<span class="tag tag-junior">Junior</span>`);
+  if (ev.isTournament) tags.push(`<span class="tag tag-tournament">Tournament</span>`);
+  if (ev.isScrim) tags.push(`<span class="tag tag-scrim">Scrim</span>`);
+  if (ev.isOpen) tags.push(`<span class="tag tag-open">Open</span>`);
+  return tags.join('');
+}
+
+function markerColor(ev) {
+  if (ev.isMRDA || ev.isJunior) return '#1565C0';
+  if (ev.isRookie) return '#00897B';
+  if (ev.isScrim) return '#777';
+  if (ev.is5N) return '#7B1FA2';
+  return '#E91E8C';
+}
+
+function eventCard(ev) {
+  const tags = buildTags(ev);
+  const host = ev.host ? `<span class="pipe">·</span>${escHtml(ev.host)}` : '';
+  return `<div class="ec">
+    <div class="ec-top">
+      <div class="ec-name">${escHtml(ev.summary)}</div>
+      ${ev.url ? `<a class="ec-link" href="${escHtml(ev.url)}" target="_blank" rel="noopener">TOaST ↗</a>` : ''}
+    </div>
+    <div class="ec-meta">
+      <span>${fmtDate(ev.date)} · ${fmtTime(ev.date)}</span>
+      <span class="pipe">·</span><span>${escHtml(ev.location)}</span>
+      ${host}
+    </div>
+    ${tags ? `<div class="ec-tags">${tags}</div>` : ''}
+  </div>`;
+}
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let allEvents = [];
+let filteredEvents = [];
+let currentView = 'map';
+let filters = { time: 'upcoming', type: 'all', tier: 'all', search: '' };
+let leafletMap = null;
+let markerLayer = null;
+const TODAY = new Date(); TODAY.setUTCHours(0,0,0,0);
+
+// ─── FILTERING ───────────────────────────────────────────────────────────────
+function matchesFilters(ev) {
+  if (filters.time === 'upcoming' && ev.date < TODAY) return false;
+  if (filters.type === '5n'         && !ev.is5N) return false;
+  if (filters.type === 'scrim'      && !ev.isScrim) return false;
+  if (filters.type === 'tournament' && !ev.isTournament) return false;
+  if (filters.type === 'rookie'     && !ev.isRookie) return false;
+  if (filters.type === 'mrda'       && !ev.isMRDA) return false;
+  if (filters.type === 'junior'     && !ev.isJunior) return false;
+  if (filters.tier !== 'all'        && ev.tier !== parseInt(filters.tier)) return false;
+  if (filters.search) {
+    const q = filters.search.toLowerCase();
+    if (!`${ev.summary} ${ev.location} ${ev.host} ${ev.description}`.toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+
+function applyFilters() {
+  filteredEvents = allEvents.filter(matchesFilters);
+  document.getElementById('results-info').textContent =
+    filteredEvents.length + (filteredEvents.length === 1 ? ' event' : ' events');
+}
+
+// ─── RENDER: TIMELINE ────────────────────────────────────────────────────────
+function renderTimeline() {
+  const el = document.getElementById('timeline-view');
+  if (!filteredEvents.length) {
+    el.innerHTML = `<div class="empty"><h2>No events found</h2><p>Try adjusting your filters</p></div>`;
+    return;
+  }
+
+  // Group by month, then day
+  const byMonth = {};
+  for (const ev of filteredEvents) {
+    const mk = fmtMonth(ev.date);
+    const dk = fmtDate(ev.date);
+    if (!byMonth[mk]) byMonth[mk] = {};
+    if (!byMonth[mk][dk]) byMonth[mk][dk] = [];
+    byMonth[mk][dk].push(ev);
+  }
+
+  let html = '<div class="event-grid">';
+  for (const [month, days] of Object.entries(byMonth)) {
+    html += `<div class="date-group-hd">${month}</div>`;
+    for (const [day, evs] of Object.entries(days)) {
+      html += `<div class="date-day-hd">${day} &mdash; ${evs.length} event${evs.length > 1 ? 's' : ''}</div>`;
+      for (const ev of evs) html += eventCard(ev);
+    }
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ─── RENDER: LOCATIONS ───────────────────────────────────────────────────────
+function renderLocations() {
+  const el = document.getElementById('locations-view');
+  if (!filteredEvents.length) {
+    el.innerHTML = `<div class="empty"><h2>No events found</h2><p>Try adjusting your filters</p></div>`;
+    return;
+  }
+
+  const byLoc = {};
+  for (const ev of filteredEvents) {
+    const loc = ev.location || 'Unknown location';
+    if (!byLoc[loc]) byLoc[loc] = [];
+    byLoc[loc].push(ev);
+  }
+
+  // Sort locations by soonest event
+  const sorted = Object.entries(byLoc).sort(([,a],[,b]) => a[0].date - b[0].date);
+
+  let html = '<div class="loc-grid">';
+  for (const [loc, evs] of sorted) {
+    const evItems = evs.map(ev => {
+      const tags = buildTags(ev);
+      return `<div class="loc-ev">
+        <div class="loc-ev-date">${fmtDateShort(ev.date)}<br><span style="color:#C8C8C0">${fmtTime(ev.date)}</span></div>
+        <div class="loc-ev-body">
+          <div class="loc-ev-name">${escHtml(ev.summary)}</div>
+          ${ev.host ? `<div class="loc-ev-host">${escHtml(ev.host)}</div>` : ''}
+          ${tags ? `<div class="ec-tags" style="margin-top:4px">${tags}</div>` : ''}
+        </div>
+        ${ev.url ? `<a class="loc-ev-link" href="${escHtml(ev.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+      </div>`;
+    }).join('');
+
+    html += `<div class="loc-group">
+      <div class="loc-hd" onclick="toggleLoc(this)">
+        <div class="loc-hd-left">
+          <span class="loc-pin">📍</span>
+          <span class="loc-name">${escHtml(loc)}</span>
+          <span class="loc-count">${evs.length}</span>
+        </div>
+        <span class="loc-chevron">▶</span>
+      </div>
+      <div class="loc-events">${evItems}</div>
+    </div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function toggleLoc(hd) {
+  hd.closest('.loc-group').classList.toggle('open');
+}
+
+// ─── RENDER: MAP ─────────────────────────────────────────────────────────────
+function renderMap() {
+  if (!leafletMap) initMap();
+
+  if (markerLayer) markerLayer.clearLayers();
+
+  // Group events by location string for clustering at same coords
+  const byCoordKey = {};
+  for (const ev of filteredEvents) {
+    const coords = ev.coords;
+    if (!coords) continue;
+    const key = coords.join(',');
+    if (!byCoordKey[key]) byCoordKey[key] = { coords, events: [] };
+    byCoordKey[key].events.push(ev);
+  }
+
+  for (const { coords, events } of Object.values(byCoordKey)) {
+    // Pick marker color from the "most important" event type at this location
+    const hasJuniorOrMRDA = events.some(e => e.isJunior || e.isMRDA);
+    const hasRookie = events.some(e => e.isRookie);
+    const hasScrimOnly = events.every(e => e.isScrim) && !events.some(e => e.is5N);
+    const has5N = events.some(e => e.is5N);
+    let color = '#E91E8C';
+    if (hasJuniorOrMRDA) color = '#1565C0';
+    else if (hasRookie) color = '#00897B';
+    else if (hasScrimOnly) color = '#777';
+    else if (has5N) color = '#7B1FA2';
+
+    const r = Math.min(10 + (events.length - 1) * 2, 18);
+
+    const marker = L.circleMarker(coords, {
+      radius: r,
+      fillColor: color,
+      color: '#fff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.85,
+    });
+
+    // Build popup HTML
+    const items = events.map((ev, i) => {
+      const tags = buildTags(ev);
+      return `${i > 0 ? '<hr class="lf-popup-sep">' : ''}
+        <div class="lf-popup-title">${escHtml(ev.summary)}</div>
+        <div class="lf-popup-meta">${fmtDate(ev.date)} · ${fmtTime(ev.date)}</div>
+        ${tags ? `<div class="lf-popup-tags">${tags}</div>` : ''}
+        ${ev.url ? `<a class="lf-popup-link" href="${escHtml(ev.url)}" target="_blank" rel="noopener">View on TOaST ↗</a>` : ''}`;
+    }).join('');
+
+    marker.bindPopup(`<div style="max-width:280px;max-height:320px;overflow-y:auto;font-family:'Inter',sans-serif">${items}</div>`,
+      { maxWidth: 300 });
+
+    if (markerLayer) marker.addTo(markerLayer);
+  }
+}
+
+function initMap() {
+  leafletMap = L.map('map', {
+    center: [54.5, -3.5],
+    zoom: 6,
+    scrollWheelZoom: false,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18,
+  }).addTo(leafletMap);
+
+  markerLayer = L.layerGroup().addTo(leafletMap);
+}
+
+// ─── RENDER (DISPATCH) ───────────────────────────────────────────────────────
+function render() {
+  applyFilters();
+  if (currentView === 'timeline') renderTimeline();
+  else if (currentView === 'locations') renderLocations();
+  else renderMap();
+}
+
+// ─── VIEW SWITCHING ──────────────────────────────────────────────────────────
+function setView(view) {
+  currentView = view;
+  document.getElementById('map-view').classList.toggle('hidden', view !== 'map');
+  document.getElementById('timeline-view').classList.toggle('hidden', view !== 'timeline');
+  document.getElementById('locations-view').classList.toggle('hidden', view !== 'locations');
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === view));
+  render();
+  if (view === 'map' && leafletMap) {
+    setTimeout(() => leafletMap.invalidateSize(), 50);
+  }
+}
+
+// ─── EVENT LISTENERS ─────────────────────────────────────────────────────────
+function setupListeners() {
+  // Tabs
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => setView(t.dataset.view));
+  });
+
+  // Chips
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const grp = chip.dataset.filter;
+      document.querySelectorAll(`.chip[data-filter="${grp}"]`).forEach(c => c.classList.remove('on'));
+      chip.classList.add('on');
+      filters[grp] = chip.dataset.value;
+      render();
+    });
+  });
+
+  // Search
+  let searchTimer;
+  document.getElementById('search').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      filters.search = e.target.value.trim();
+      render();
+    }, 250);
+  });
+}
+
+// ─── DATA FETCHING ────────────────────────────────────────────────────────────
+const ICS_URL = 'https://rollerderby.directory/calendar.ics';
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+async function fetchICS(url) {
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy(url), { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (text.includes('BEGIN:VCALENDAR')) return text;
+    } catch (err) {
+      console.warn('Proxy failed:', err);
+    }
+  }
+  throw new Error('All proxies failed');
+}
+
+async function init() {
+  const badge = document.getElementById('status-badge');
+  try {
+    const text = await fetchICS(ICS_URL);
+    const parsed = parseICS(text);
+    allEvents = parsed.map(ev => ({
+      ...ev,
+      ...classify(ev),
+      coords: geocode(ev.location),
+    })).sort((a, b) => a.date - b.date);
+
+    const now = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    badge.className = 'badge';
+    badge.textContent = `${allEvents.length} events · ${now}`;
+
+    setupListeners();
+    applyFilters();
+    renderMap();
+
+  } catch (err) {
+    console.error(err);
+    badge.className = 'badge error';
+    badge.innerHTML = 'Could not load events — try refreshing';
+    document.getElementById('timeline-view').innerHTML =
+      `<div class="empty"><h2>Could not load events</h2>
+      <p>Derby Dispatch fetches data live from TOaST via a CORS proxy.<br>
+      Please refresh the page, or visit <a href="https://rollerderby.directory" style="color:#E91E8C">rollerderby.directory</a> directly.</p></div>`;
+    setupListeners();
+    initMap();
+  }
+}
+
+window.toggleLoc = toggleLoc;
+init();
+</script>
+</body>
+</html>

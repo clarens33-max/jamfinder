@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -30,7 +31,9 @@ async def refresh() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await refresh()
+    # Run refresh in the background so the server starts immediately.
+    # The frontend loading screen polls /api/events until status == "ready".
+    asyncio.create_task(refresh())
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(refresh, CronTrigger(hour=3, minute=0, timezone="UTC"))

@@ -150,6 +150,16 @@ footer a{color:#E91E8C}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(233,30,140,0.3);border-top-color:#E91E8C;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* FULL-PAGE LOADING SCREEN */
+#loading-screen{position:fixed;inset:0;background:#1C1C1C;display:flex;align-items:center;justify-content:center;z-index:9999;transition:opacity 0.5s}
+#loading-screen.fade-out{opacity:0;pointer-events:none}
+.ls-inner{text-align:center;color:#fff;padding:2rem}
+.ls-logo{font-family:'Oswald',sans-serif;font-size:3rem;font-weight:700;letter-spacing:0.04em;margin-bottom:1.25rem;line-height:1}
+.ls-logo em{color:#E91E8C;font-style:normal}
+.ls-pun{font-family:'Oswald',sans-serif;font-size:1.3rem;color:#E91E8C;margin-bottom:0.6rem;letter-spacing:0.03em}
+.ls-sub{font-size:0.875rem;color:rgba(255,255,255,0.45);line-height:1.7;margin-bottom:2rem;max-width:320px}
+.ls-spinner{display:inline-block;width:36px;height:36px;border:3px solid rgba(233,30,140,0.25);border-top-color:#E91E8C;border-radius:50%;animation:spin 0.7s linear infinite}
+
 /* RESPONSIVE */
 @media(max-width:640px){
   .header{padding:0.875rem 1rem}
@@ -164,6 +174,15 @@ footer a{color:#E91E8C}
 </style>
 </head>
 <body>
+
+<div id="loading-screen">
+  <div class="ls-inner">
+    <div class="ls-logo">JAM<em>FINDER</em></div>
+    <div class="ls-pun">Lacing up our skates…</div>
+    <div class="ls-sub">Hunting down every jam across the UK.<br>Hold your blockers — we'll be right back!</div>
+    <div class="ls-spinner"></div>
+  </div>
+</div>
 
 <header class="header">
   <div>
@@ -233,7 +252,8 @@ footer a{color:#E91E8C}
 <footer>
   All event data is sourced from <a href="https://rollerderby.directory" target="_blank" rel="noopener">rollerderby.directory (TOaST)</a> — UK Roller Derby Officials Planner.<br>
   Jam Finder is a community viewer only. To volunteer as a referee or NSO, or to create/edit events, please visit TOaST directly.<br>
-  Data refreshes overnight automatically.
+  Data refreshes overnight automatically.<br>
+  <span style="margin-top:0.6rem;display:inline-block;color:#BBB">© 2026 Jam Finder · All Rights Reserved · Not affiliated with TOaST, WFTDA, MRDA or any roller derby organisation</span>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -519,12 +539,28 @@ function setupListeners() {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+let _listenersSetUp = false;
+
 async function init() {
   const badge = document.getElementById('status-badge');
+  const loadingScreen = document.getElementById('loading-screen');
+
   try {
     const res = await fetch('/api/events');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+
+    // Server still loading — show full-screen overlay and retry
+    if (data.status === 'loading') {
+      loadingScreen.classList.remove('fade-out');
+      loadingScreen.style.display = 'flex';
+      setTimeout(init, 5000);
+      return;
+    }
+
+    // Data ready — fade out loading screen
+    loadingScreen.classList.add('fade-out');
+    setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
 
     allEvents = data.events
       .map(ev => ({ ...ev, date: new Date(ev.date) }))
@@ -538,18 +574,19 @@ async function init() {
     badge.className = 'badge';
     badge.textContent = `${allEvents.length} events · ${updated}`;
 
-    setupListeners();
+    if (!_listenersSetUp) { setupListeners(); _listenersSetUp = true; }
     applyFilters();
     renderMap();
 
   } catch (err) {
     console.error(err);
+    loadingScreen.style.display = 'none';
     badge.className = 'badge error';
     badge.innerHTML = 'Could not load events — try refreshing';
     document.getElementById('timeline-view').innerHTML =
       `<div class="empty"><h2>Could not load events</h2>
       <p>Please refresh the page, or visit <a href="https://rollerderby.directory" style="color:#E91E8C">rollerderby.directory</a> directly.</p></div>`;
-    setupListeners();
+    if (!_listenersSetUp) { setupListeners(); _listenersSetUp = true; }
     initMap();
   }
 }

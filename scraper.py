@@ -211,6 +211,25 @@ def classify(summary: str) -> dict:
     }
 
 
+async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) -> list | None:
+    """Precise geocoding via Nominatim. Falls back to None on any failure."""
+    query = f"{address}, {city}, UK" if city else f"{address}, UK"
+    try:
+        await asyncio.sleep(1)  # Nominatim rate limit: 1 req/sec
+        resp = await client.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": query, "format": "json", "limit": 1, "countrycodes": "gb,ie"},
+            headers={"User-Agent": "JamFinder/1.0 (uk-roller-derby-community-viewer)"},
+            timeout=8,
+        )
+        data = resp.json()
+        if data:
+            return [float(data[0]["lat"]), float(data[0]["lon"])]
+    except Exception as exc:
+        logger.debug("Nominatim failed for '%s': %s", address, exc)
+    return None
+
+
 async def login(client: httpx.AsyncClient) -> bool:
     """Log in to TOaST. Returns True if successful."""
     email = os.environ.get("TOAST_EMAIL", "")
@@ -293,6 +312,18 @@ async def fetch_event_details(client: httpx.AsyncClient, url: str, sem: asyncio.
                         for a in td.find_all("a"):
                             a.decompose()
                         result["address"] = td.get_text(strip=True)
+                        city = soup.find(id="details")
+                        city_text = ""
+                        if city:
+                            for r in city.find_all("tr"):
+                                th = r.find("th")
+                                td2 = r.find("td")
+                                if th and td2 and th.get_text(strip=True).lower() == "city":
+                                    city_text = td2.get_text(strip=True)
+                                    break
+                        result["precise_coords"] = await geocode_nominatim(
+                            client, result["address"], city_text
+                        )
 
                     elif label == "timings":
                         pre = td.find("pre")
@@ -397,6 +428,17 @@ async def fetch_events() -> list[dict]:
                                     break
                         if not ev['is5N']:
                             ev['is5N'] = True  # division badges imply 5NRD
+
+                    # Precise map coords from venue address (overrides city-level)
+                    if details.get('precise_coords'):
+                        ev['coords'] = details['precise_coords']
+
+                    # Rookie flag from game team names
+                    if not ev['isRookie'] and ev['games']:
+                        ev['isRookie'] = any(
+                            'rookie' in (g.get('home', '') + ' ' + g.get('away', '')).lower()
+                            for g in ev['games']
+                        )
 
             enriched = sum(
                 1 for d in url_to_details.values()

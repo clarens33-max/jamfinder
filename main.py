@@ -50,6 +50,7 @@ async def get_events():
         "events": cache["events"],
         "last_updated": cache["last_updated"],
         "count": len(cache["events"]),
+        "status": "ready" if cache["last_updated"] else "loading",
     })
 
 

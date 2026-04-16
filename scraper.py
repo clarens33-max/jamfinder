@@ -212,8 +212,15 @@ def classify(summary: str) -> dict:
 
 
 async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) -> list | None:
-    """Precise geocoding via Nominatim. Falls back to None on any failure."""
-    query = f"{address}, {city}, UK" if city else f"{address}, UK"
+    """Precise geocoding via Nominatim. Uses postcode if present — most reliable for UK."""
+    # UK postcode is the best query — precise and unambiguous
+    postcode_m = re.search(r'[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}', address, re.IGNORECASE)
+    if postcode_m:
+        query = postcode_m.group(0).upper()
+    else:
+        # Use address as-is; only append city if not already in the string
+        query = address if city.lower() in address.lower() else f"{address}, {city}"
+
     try:
         await asyncio.sleep(1)  # Nominatim rate limit: 1 req/sec
         resp = await client.get(
@@ -226,7 +233,7 @@ async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) 
         if data:
             return [float(data[0]["lat"]), float(data[0]["lon"])]
     except Exception as exc:
-        logger.debug("Nominatim failed for '%s': %s", address, exc)
+        logger.debug("Nominatim failed for '%s': %s", query, exc)
     return None
 
 

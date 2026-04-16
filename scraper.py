@@ -211,16 +211,8 @@ def classify(summary: str) -> dict:
     }
 
 
-async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) -> list | None:
-    """Precise geocoding via Nominatim. Uses postcode if present — most reliable for UK."""
-    # UK postcode is the best query — precise and unambiguous
-    postcode_m = re.search(r'[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}', address, re.IGNORECASE)
-    if postcode_m:
-        query = postcode_m.group(0).upper()
-    else:
-        # Use address as-is; only append city if not already in the string
-        query = address if city.lower() in address.lower() else f"{address}, {city}"
-
+async def _nominatim_query(client: httpx.AsyncClient, query: str) -> list | None:
+    """Single Nominatim request. Returns [lat, lon] or None."""
     try:
         await asyncio.sleep(1)  # Nominatim rate limit: 1 req/sec
         resp = await client.get(
@@ -235,6 +227,25 @@ async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) 
     except Exception as exc:
         logger.debug("Nominatim failed for '%s': %s", query, exc)
     return None
+
+
+async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) -> list | None:
+    """
+    Precise geocoding for a venue address.
+    1. If address contains a UK postcode, use that — most reliable.
+    2. Otherwise query Nominatim with the cleaned address text to find coords.
+    3. Returns None if nothing found — caller falls back to city-level coords.
+    """
+    postcode_m = re.search(r'[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}', address, re.IGNORECASE)
+    if postcode_m:
+        return await _nominatim_query(client, postcode_m.group(0).upper())
+
+    # No postcode — clean up the address and try Nominatim directly
+    clean = re.sub(r',?\s*United Kingdom', '', address, flags=re.IGNORECASE).strip()
+    clean = re.sub(r'\s{2,}', ' ', clean)
+    if city and city.lower() not in clean.lower():
+        clean = f"{clean}, {city}"
+    return await _nominatim_query(client, clean)
 
 
 async def login(client: httpx.AsyncClient) -> bool:

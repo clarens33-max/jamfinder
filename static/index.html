@@ -423,7 +423,7 @@ function renderLocations() {
     if (!byLoc[loc]) byLoc[loc] = [];
     byLoc[loc].push(ev);
   }
-  const sorted = Object.entries(byLoc).sort(([,a],[,b]) => a[0].date - b[0].date);
+  const sorted = Object.entries(byLoc).sort(([a],[b]) => a.localeCompare(b));
   let html = '<div class="loc-grid">';
   for (const [loc, evs] of sorted) {
     const evItems = evs.map(ev => eventCard(ev)).join('');

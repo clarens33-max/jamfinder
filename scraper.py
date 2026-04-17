@@ -248,32 +248,49 @@ async def geocode_nominatim(client: httpx.AsyncClient, address: str, city: str) 
     return await _nominatim_query(client, clean)
 
 
-async def login(client: httpx.AsyncClient) -> bool:
-    """Log in to TOaST. Returns True if successful."""
+async def login(client: httpx.AsyncClient, retries: int = 3, backoff: float = 10.0) -> bool:
+    """Log in to TOaST. Returns True if successful.
+
+    Retries up to `retries` times on transient failures (network errors, missing
+    CSRF token). Stops immediately if the server rejects the credentials, since
+    retrying won't fix bad passwords.
+    """
     email = os.environ.get("TOAST_EMAIL", "")
     password = os.environ.get("TOAST_PASSWORD", "")
     if not email or not password:
         logger.warning("TOAST_EMAIL / TOAST_PASSWORD not set — skipping login")
         return False
-    try:
-        resp = await client.get(f"{TOAST_BASE}/accounts/login/")
-        m = re.search(r'name="csrfmiddlewaretoken"[^>]*value="([^"]+)"', resp.text)
-        if not m:
-            logger.warning("Login: could not find CSRF token")
+
+    for attempt in range(1, retries + 1):
+        try:
+            resp = await client.get(f"{TOAST_BASE}/accounts/login/")
+            m = re.search(r'name="csrfmiddlewaretoken"[^>]*value="([^"]+)"', resp.text)
+            if not m:
+                logger.warning("Login attempt %d/%d: CSRF token not found — will retry", attempt, retries)
+                if attempt < retries:
+                    await asyncio.sleep(backoff * attempt)
+                continue
+            csrf = m.group(1)
+            login_resp = await client.post(
+                f"{TOAST_BASE}/accounts/login/",
+                data={"csrfmiddlewaretoken": csrf, "username": email, "password": password, "next": ""},
+                headers={"Referer": f"{TOAST_BASE}/accounts/login/"},
+                follow_redirects=True,
+            )
+            if "/accounts/login/" not in str(login_resp.url):
+                logger.info("Login succeeded (attempt %d/%d)", attempt, retries)
+                return True
+            # Server redirected back to the login page → credentials rejected.
+            # No point retrying — bail out immediately.
+            logger.error("Login FAILED: credentials rejected. Check TOAST_EMAIL / TOAST_PASSWORD.")
             return False
-        csrf = m.group(1)
-        login_resp = await client.post(
-            f"{TOAST_BASE}/accounts/login/",
-            data={"csrfmiddlewaretoken": csrf, "username": email, "password": password, "next": ""},
-            headers={"Referer": f"{TOAST_BASE}/accounts/login/"},
-            follow_redirects=True,
-        )
-        success = "/accounts/login/" not in str(login_resp.url)
-        logger.info("Login %s", "succeeded" if success else "FAILED — check credentials")
-        return success
-    except Exception as exc:
-        logger.error("Login error: %s", exc)
-        return False
+        except Exception as exc:
+            logger.error("Login attempt %d/%d error: %s", attempt, retries, exc)
+            if attempt < retries:
+                await asyncio.sleep(backoff * attempt)
+
+    logger.error("Login failed after %d attempts — enrichment will be skipped", retries)
+    return False
 
 
 async def fetch_event_details(client: httpx.AsyncClient, url: str, sem: asyncio.Semaphore) -> dict:

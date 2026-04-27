@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import os
+
+from dotenv import load_dotenv
+load_dotenv()
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -35,8 +38,11 @@ async def lifespan(app: FastAPI):
     # The frontend loading screen polls /api/events until status == "ready".
     asyncio.create_task(refresh())
 
+    from instagram_agent.poster import post_weekly
+
     scheduler = AsyncIOScheduler()
     scheduler.add_job(refresh, CronTrigger(hour=3, minute=0, timezone="UTC"))
+    scheduler.add_job(post_weekly, CronTrigger(day_of_week="thu", hour=9, minute=0, timezone="Europe/London"), args=[cache, refresh])
     scheduler.start()
 
     yield
@@ -62,6 +68,14 @@ async def manual_refresh():
     """Trigger a manual data refresh (useful for testing)."""
     await refresh()
     return {"ok": True, "count": len(cache["events"]), "last_updated": cache["last_updated"]}
+
+
+@app.get("/api/instagram-test")
+async def instagram_test():
+    """Manually trigger the Instagram agent (dry-run when META_ACCESS_TOKEN is unset)."""
+    from instagram_agent.poster import post_weekly
+    asyncio.create_task(post_weekly(cache, refresh))
+    return {"ok": True, "message": "Instagram post job started — check logs for output"}
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

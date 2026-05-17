@@ -14,7 +14,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_GRAPH_BASE = "https://graph.facebook.com/v19.0"
+_GRAPH_BASE = "https://graph.facebook.com/v22.0"
 _TMP_DIR = Path(__file__).parent.parent / "static" / "ig_tmp"
 
 
@@ -67,6 +67,8 @@ async def _upload_image_container(
         },
         timeout=30,
     )
+    if resp.status_code != 200:
+        logger.error("Meta API error %s: %s", resp.status_code, resp.text)
     resp.raise_for_status()
     return resp.json()["id"]
 

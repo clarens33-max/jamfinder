@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(refresh, CronTrigger(hour=3, minute=0, timezone="UTC"))
-    scheduler.add_job(post_weekly, CronTrigger(day_of_week="thu", hour=9, minute=0, timezone="Europe/London"), args=[cache, refresh])
+    scheduler.add_job(post_weekly, CronTrigger(day_of_week="wed", hour=18, minute=0, timezone="Europe/London"), args=[cache, refresh])
     scheduler.start()
 
     yield

@@ -1,5 +1,5 @@
 """
-Generate 1080×1080 PNG slides via Playwright (headless Chromium).
+Generate 1254×1254 PNG slides via Playwright (headless Chromium).
 Event slides overlay text onto static/backgrounds/event_frame.png.
 CTA slide uses static/backgrounds/cta.png directly — no text added.
 """
@@ -77,37 +77,43 @@ def _event_slide_html(ev: dict) -> str:
     *, *::before, *::after {{ margin: 0; padding: 0; box-sizing: border-box; }}
 
     body {{
-      width: 1080px;
-      height: 1080px;
+      width: 1254px;
+      height: 1254px;
       background: url('{frame_uri}') center/cover no-repeat;
       font-family: 'Inter', sans-serif;
       color: #fff;
       overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: relative;
     }}
 
-    /* Text lives in the black centre of the frame */
+    /* Text lives in the black inner area of the frame.
+       Inner rectangle: x 175–1079 (width 904px), y 255–1220 (height 965px) */
     .content {{
-      width: 700px;
+      position: absolute;
+      left: 175px;
+      top: 255px;
+      width: 904px;
+      height: 965px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
       text-align: center;
     }}
 
     .badges {{
       display: flex;
-      gap: 8px;
+      gap: 10px;
       justify-content: center;
+      flex-wrap: wrap;
     }}
 
     .badge {{
       font-family: 'Oswald', sans-serif;
-      font-size: 12px;
+      font-size: 14px;
       letter-spacing: 2px;
-      padding: 4px 14px;
+      padding: 5px 16px;
       border-radius: 4px;
     }}
     .five-n {{ background: #9c27b0; }}
@@ -116,7 +122,7 @@ def _event_slide_html(ev: dict) -> str:
 
     .event-name {{
       font-family: 'Oswald', sans-serif;
-      font-size: 48px;
+      font-size: 58px;
       font-weight: 700;
       line-height: 1.05;
       letter-spacing: 1px;
@@ -124,20 +130,20 @@ def _event_slide_html(ev: dict) -> str:
     }}
 
     .location {{
-      font-size: 16px;
+      font-size: 20px;
       color: #E91E8C;
       font-weight: 600;
     }}
 
     .address {{
-      font-size: 13px;
+      font-size: 15px;
       color: #aaa;
       margin-top: -8px;
     }}
 
     .date {{
       font-family: 'Oswald', sans-serif;
-      font-size: 20px;
+      font-size: 24px;
       letter-spacing: 2px;
       color: #fff;
     }}
@@ -146,27 +152,30 @@ def _event_slide_html(ev: dict) -> str:
       border: none;
       border-top: 1px solid #333;
       margin: 4px 0;
+      width: 100%;
     }}
 
     .bouts {{
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
+      width: 100%;
     }}
 
     .bout {{
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 14px;
       font-family: 'Oswald', sans-serif;
-      font-size: 22px;
+      font-size: 26px;
       font-weight: 600;
     }}
 
     .vs {{
       color: #E91E8C;
-      font-size: 16px;
+      font-size: 18px;
+      flex-shrink: 0;
     }}
 
     .team {{
@@ -199,7 +208,7 @@ async def generate_event_slide(ev: dict) -> bytes:
     html = _event_slide_html(ev)
     async with async_playwright() as p:
         browser = await p.chromium.launch()
-        page = await browser.new_page(viewport={"width": 1080, "height": 1080})
+        page = await browser.new_page(viewport={"width": 1254, "height": 1254})
         await page.set_content(html, wait_until="networkidle")
         png = await page.screenshot(type="png")
         await browser.close()

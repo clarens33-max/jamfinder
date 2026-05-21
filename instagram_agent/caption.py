@@ -45,14 +45,16 @@ def build_caption(events: list[dict], overflow: int = 0) -> str:
             continue
         lines.append(day_label)
         for ev in day_events:
+            is_scrim = ev.get("isScrim", False)
+            closed_doors_note = " (Closed Doors)" if is_scrim else ""
             games = ev.get("games", [])
             if games:
                 for g in games:
                     home = _tag(g["home"], handles)
                     away = _tag(g["away"], handles)
-                    lines.append(f"• {home} vs {away}")
+                    lines.append(f"• {home} vs {away}{closed_doors_note}")
             else:
-                lines.append(f"• {ev['summary']}")
+                lines.append(f"• {ev['summary']}{closed_doors_note}")
             loc = ev.get("location", "")
             if loc:
                 lines.append(f"  📍 {loc}")

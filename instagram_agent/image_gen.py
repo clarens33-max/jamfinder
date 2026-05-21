@@ -58,11 +58,15 @@ def _event_slide_html(ev: dict) -> str:
     tier = ev.get("tier")
     is5n = ev.get("is5N", False)
 
+    is_scrim = ev.get("isScrim", False)
+
     badges = ""
     if is5n:
         badges += '<span class="badge five-n">5 NATIONS</span>'
     if tier:
         badges += f'<span class="badge tier">TIER {tier}</span>'
+    if is_scrim:
+        badges += '<span class="badge closed-doors">SCRIMMAGE · CLOSED DOORS</span>'
 
     return f"""<!DOCTYPE html>
 <html>
@@ -108,6 +112,7 @@ def _event_slide_html(ev: dict) -> str:
     }}
     .five-n {{ background: #9c27b0; }}
     .tier {{ background: #E91E8C; }}
+    .closed-doors {{ background: #333; border: 1px solid #666; }}
 
     .event-name {{
       font-family: 'Oswald', sans-serif;

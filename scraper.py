@@ -167,7 +167,7 @@ def parse_ics(text: str) -> list[dict]:
     return result
 
 
-def classify(summary: str) -> dict:
+def classify(summary: str, description: str = "") -> dict:
     s = summary
     is5N = bool(re.search(r'5\s*[Nn](ations?|rd)?|five\s*nations', s, re.IGNORECASE))
 
@@ -197,7 +197,7 @@ def classify(summary: str) -> dict:
         'is5N': is5N,
         'tier': tier,
         'gameCount': game_count,
-        'isScrim': bool(re.search(r'\bscrim(mage)?\b|closed\s*door', s, re.IGNORECASE)),
+        'isScrim': bool(re.search(r'\bscrim(mage)?\b|closed\s*door', s + ' ' + description, re.IGNORECASE)),
         'isRookie': bool(re.search(r'\brookies?\b', s, re.IGNORECASE)),
         'isMRDA': isMRDA,
         'isOTA': isOTA,
@@ -432,7 +432,7 @@ async def fetch_events() -> list[dict]:
             for ev in expand_multi_tier(e):
                 events.append({
                     **ev,
-                    **classify(ev['summary']),
+                    **classify(ev['summary'], ev.get('description', '')),
                     'coords': geocode(ev['location']),
                     'games': [],
                     'address': None,

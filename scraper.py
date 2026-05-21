@@ -197,7 +197,7 @@ def classify(summary: str) -> dict:
         'is5N': is5N,
         'tier': tier,
         'gameCount': game_count,
-        'isScrim': bool(re.search(r'\bscrim\b|closed\s*door', s, re.IGNORECASE)),
+        'isScrim': bool(re.search(r'\bscrim(mage)?\b|closed\s*door', s, re.IGNORECASE)),
         'isRookie': bool(re.search(r'\brookies?\b', s, re.IGNORECASE)),
         'isMRDA': isMRDA,
         'isOTA': isOTA,
@@ -402,6 +402,23 @@ def expand_multi_tier(event: dict) -> list[dict]:
     return results
 
 
+_PLACEHOLDER_RE = re.compile(r'^team\s+placeholder$', re.IGNORECASE)
+
+
+def _resolve_placeholder_teams(games: list[dict]) -> list[dict]:
+    """Replace 'Team Placeholder' entries with 'Team Not Confirmed 1/2' sequentially."""
+    counter = 0
+    result = []
+    for g in games:
+        g = dict(g)
+        for side in ("home", "away"):
+            if _PLACEHOLDER_RE.match(g.get(side, "")):
+                counter += 1
+                g[side] = f"Team Not Confirmed {counter}"
+        result.append(g)
+    return result
+
+
 async def fetch_events() -> list[dict]:
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
         # Fetch ICS — this always works regardless of auth
@@ -448,7 +465,7 @@ async def fetch_events() -> list[dict]:
                     ev = uid_index.get(uid)
                     if not ev:
                         continue
-                    ev['games'] = details.get('games', [])
+                    ev['games'] = _resolve_placeholder_teams(details.get('games', []))
                     ev['address'] = details.get('address')
                     ev['timings'] = details.get('timings')
 

@@ -86,20 +86,21 @@ def _event_slide_html(ev: dict) -> str:
       position: relative;
     }}
 
-    /* Text lives in the black inner area of the frame.
-       Inner rectangle: x 175–1079 (width 904px), y 255–1220 (height 965px) */
+    /* Inner black rectangle: x 171–1082 (911px wide), y 305–1225 (920px tall).
+       20px padding keeps text away from the pink border lines. */
     .content {{
       position: absolute;
-      left: 175px;
-      top: 255px;
-      width: 904px;
-      height: 965px;
+      left: 191px;
+      top: 305px;
+      width: 871px;
+      height: 920px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 16px;
+      justify-content: flex-start;
+      gap: 18px;
       text-align: center;
+      padding-top: 10px;
     }}
 
     .badges {{
@@ -111,9 +112,9 @@ def _event_slide_html(ev: dict) -> str:
 
     .badge {{
       font-family: 'Oswald', sans-serif;
-      font-size: 14px;
+      font-size: 17px;
       letter-spacing: 2px;
-      padding: 5px 16px;
+      padding: 6px 18px;
       border-radius: 4px;
     }}
     .five-n {{ background: #9c27b0; }}
@@ -122,43 +123,44 @@ def _event_slide_html(ev: dict) -> str:
 
     .event-name {{
       font-family: 'Oswald', sans-serif;
-      font-size: 58px;
+      font-size: 72px;
       font-weight: 700;
-      line-height: 1.05;
+      line-height: 1.0;
       letter-spacing: 1px;
       color: #fff;
     }}
 
     .location {{
-      font-size: 20px;
+      font-size: 38px;
       color: #E91E8C;
-      font-weight: 600;
+      font-weight: 700;
+      line-height: 1.1;
     }}
 
     .address {{
-      font-size: 15px;
+      font-size: 26px;
       color: #aaa;
-      margin-top: -8px;
+      margin-top: -10px;
     }}
 
     .date {{
       font-family: 'Oswald', sans-serif;
-      font-size: 24px;
-      letter-spacing: 2px;
+      font-size: 36px;
+      letter-spacing: 3px;
       color: #fff;
     }}
 
     .divider {{
       border: none;
-      border-top: 1px solid #333;
-      margin: 4px 0;
+      border-top: 1px solid #444;
+      margin: 2px 0;
       width: 100%;
     }}
 
     .bouts {{
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
       width: 100%;
     }}
 
@@ -168,13 +170,13 @@ def _event_slide_html(ev: dict) -> str:
       justify-content: center;
       gap: 14px;
       font-family: 'Oswald', sans-serif;
-      font-size: 26px;
+      font-size: 34px;
       font-weight: 600;
     }}
 
     .vs {{
       color: #E91E8C;
-      font-size: 18px;
+      font-size: 22px;
       flex-shrink: 0;
     }}
 

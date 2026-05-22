@@ -469,6 +469,10 @@ async def fetch_events() -> list[dict]:
                     ev['address'] = details.get('address')
                     ev['timings'] = details.get('timings')
 
+                    # Re-check isScrim against timings (scrimmage may only appear there)
+                    if not ev['isScrim'] and ev['timings']:
+                        ev['isScrim'] = bool(re.search(r'\bscrim(mage)?\b|closed\s*door', ev['timings'], re.IGNORECASE))
+
                     # Fill in tier/is5N from division badges when title regex missed them
                     divisions = details.get('divisions', [])
                     if divisions:

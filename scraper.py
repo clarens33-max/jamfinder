@@ -404,9 +404,48 @@ def expand_multi_tier(event: dict) -> list[dict]:
 
 _PLACEHOLDER_RE = re.compile(r'^team\s+placeholder$', re.IGNORECASE)
 
+# Matches timings lines like: "10:00 (OTA Tier 2) Home Team vs Away Team"
+_TIMING_GAME_RE = re.compile(
+    r'^\d{1,2}:\d{2}\s+\([^)]+\)\s+(.+?)\s+vs\s+(.+)$',
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _extract_timings_teams(timings: str) -> list[tuple[str, str]]:
+    """Return (home, away) pairs from timings text, skipping hold/placeholder/TBC lines."""
+    pairs = []
+    for m in _TIMING_GAME_RE.finditer(timings):
+        home = m.group(1).strip()
+        away = m.group(2).strip()
+        if re.search(r'\bplaceholder\b|\bTBC\b|\bHold\b', home + ' ' + away, re.IGNORECASE):
+            continue
+        pairs.append((home, away))
+    return pairs
+
+
+def _fill_teams_from_timings(games: list[dict], timings: str | None) -> list[dict]:
+    """
+    Overwrite home/away team names in games with names parsed from timings.
+    Timings is updated more frequently than the games tab, so it is always
+    the authoritative source for team names. Matches positionally.
+    Association and gameType are kept from the games tab.
+    """
+    if not timings or not games:
+        return games
+    timings_teams = _extract_timings_teams(timings)
+    if not timings_teams:
+        return games
+    result = []
+    for i, game in enumerate(games):
+        g = dict(game)
+        if i < len(timings_teams):
+            g['home'], g['away'] = timings_teams[i]
+        result.append(g)
+    return result
+
 
 def _resolve_placeholder_teams(games: list[dict]) -> list[dict]:
-    """Replace 'Team Placeholder' entries with 'Team Not Confirmed 1/2' sequentially."""
+    """Replace remaining 'Team Placeholder' entries with 'Team Not Confirmed 1/2' sequentially."""
     counter = 0
     result = []
     for g in games:
@@ -465,9 +504,12 @@ async def fetch_events() -> list[dict]:
                     ev = uid_index.get(uid)
                     if not ev:
                         continue
-                    ev['games'] = _resolve_placeholder_teams(details.get('games', []))
+                    raw_games = details.get('games', [])
+                    timings_text = details.get('timings')
+                    updated_games = _fill_teams_from_timings(raw_games, timings_text)
+                    ev['games'] = _resolve_placeholder_teams(updated_games)
                     ev['address'] = details.get('address')
-                    ev['timings'] = details.get('timings')
+                    ev['timings'] = timings_text
 
                     # Re-check isScrim against timings (scrimmage may only appear there)
                     if not ev['isScrim'] and ev['timings']:

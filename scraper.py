@@ -511,9 +511,25 @@ async def fetch_events() -> list[dict]:
                     ev['address'] = details.get('address')
                     ev['timings'] = timings_text
 
-                    # Re-check isScrim against timings (scrimmage may only appear there)
-                    if not ev['isScrim'] and ev['timings']:
-                        ev['isScrim'] = bool(re.search(r'\bscrim(mage)?\b|closed\s*door', ev['timings'], re.IGNORECASE))
+                    # Re-check classification flags against timings — these may not
+                    # appear in the summary but are explicit in the timings schedule.
+                    if timings_text:
+                        if not ev['isScrim']:
+                            ev['isScrim'] = bool(re.search(r'\bscrim(mage)?\b|closed\s*door', timings_text, re.IGNORECASE))
+                        if re.search(r'\bMRDA\b|\bT[1-5]\s*M\b', timings_text):
+                            ev['isMRDA'] = True
+                        if re.search(r'\bOTA\b|open\s+to\s+all', timings_text, re.IGNORECASE):
+                            ev['isOTA'] = True
+                        if re.search(r'\bWFTDA\b|\bT[1-5]\s*W\b|women', timings_text, re.IGNORECASE):
+                            ev['isWFTDA'] = True
+                        # isWFTDA may have been set True only by the default fallback
+                        # (not MRDA and not OTA). Now that we have timings, if we can
+                        # see explicit MRDA or OTA entries but no WFTDA signal anywhere,
+                        # clear that assumption.
+                        if ev['isMRDA'] or ev['isOTA']:
+                            all_text = ev.get('summary', '') + ' ' + ev.get('description', '') + ' ' + timings_text
+                            if not re.search(r'\bWFTDA\b|\bT[1-5]\s*W\b|women', all_text, re.IGNORECASE):
+                                ev['isWFTDA'] = False
 
                     # Fill in tier/is5N from division badges when title regex missed them
                     divisions = details.get('divisions', [])
